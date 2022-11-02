@@ -1,3 +1,6 @@
-[submodule "tools"]
-	path = tools
-	url = https://github.com/dekoch/CloudlessHomeAutomation-tools.git
+[submodule "switch/core"]
+	path = switch/core
+	url = https://github.com/dekoch/CloudlessHomeAutomation-core.git
+[submodule "efoy/core"]
+	path = efoy/core
+	url = https://github.com/dekoch/CloudlessHomeAutomation-core.git

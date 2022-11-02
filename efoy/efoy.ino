@@ -8,10 +8,10 @@
 //************************************************************
 
 #include <painlessMesh.h>
-#include "Fs.h"
-#include "Config.h"
-#include "ConfigWifi.h"
-#include "ConfigMesh.h"
+#include "core/Fs.h"
+#include "core/Config.h"
+#include "core/ConfigWifi.h"
+#include "core/ConfigMesh.h"
 
 #define VERSION   "1.001"
 

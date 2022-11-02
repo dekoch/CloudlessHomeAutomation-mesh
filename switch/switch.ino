@@ -9,11 +9,11 @@
 
 #include <painlessMesh.h>
 #include "HLW8012.h"
-#include "Edge.h"
-#include "Fs.h"
-#include "Config.h"
-#include "ConfigWifi.h"
-#include "ConfigMesh.h"
+#include "core/Edge.h"
+#include "core/Fs.h"
+#include "core/Config.h"
+#include "core/ConfigWifi.h"
+#include "core/ConfigMesh.h"
 #include "ConfigSwitch.h"
 
 #define SHELLY_1PM
