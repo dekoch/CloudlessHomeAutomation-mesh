@@ -82,11 +82,11 @@
 #define DO_0              4       //GPIO4
 #endif
 
-#define   BLINK_PERIOD        3000  // milliseconds until cycle repeat
-#define   BLINK_DURATION      100   // milliseconds LED is on for
-#define   CHECK_DI_PERIOD     100   // milliseconds until cycle repeat
-#define   CHECK_POWER_PERIOD  5000  // milliseconds until cycle repeat
-#define   CHECK_TEMP_PERIOD   5000  // milliseconds until cycle repeat
+#define BLINK_PERIOD        3000  // milliseconds until cycle repeat
+#define BLINK_DURATION      100   // milliseconds LED is on for
+#define CHECK_DI_PERIOD     100   // milliseconds until cycle repeat
+#define CHECK_POWER_PERIOD  5000  // milliseconds until cycle repeat
+#define CHECK_TEMP_PERIOD   5000  // milliseconds until cycle repeat
 
 // These are the nominal values for the resistors in the circuit
 #define CURRENT_RESISTOR                0.001
@@ -524,7 +524,7 @@ void setup() {
 
 void loop() {
   mesh.update();
-  //digitalWrite(LED, !onFlag == !LED_INV);
+  digitalWrite(LED, !onFlag == !LED_INV);
 }
 
 void sendMessage() {
