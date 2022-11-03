@@ -4,3 +4,6 @@
 [submodule "switch/core"]
 	path = switch/core
 	url = https://github.com/dekoch/CloudlessHomeAutomation-core.git
+[submodule "rootNode/core"]
+	path = rootNode/core
+	url = https://github.com/dekoch/CloudlessHomeAutomation-core.git
