@@ -15,6 +15,7 @@
 #include "core/Config.h"
 #include "core/ConfigWifi.h"
 #include "core/ConfigMesh.h"
+#include "core/ConfigSwitch.h"
 
 #define VERSION "1.001"
 
@@ -39,10 +40,10 @@ SimpleList<uint32_t> nodes;
 
 // Task to blink the number of nodes
 Task blinkNoNodes;
-Task updateFirmware;
 bool onFlag = false;
 
 ConfigMesh configMesh = ConfigMesh();
+ConfigSwitch configSwitch = ConfigSwitch();
 
 void setup() {
   delay(500);
@@ -72,7 +73,14 @@ void setup() {
     return;
   }
 
-  mesh.setDebugMsgTypes(ERROR | STARTUP | CONNECTION | DEBUG);  // set before init() so that you can see startup messages
+  createMissingFiles();
+  restoreFromSd();
+
+  Serial.println(String(CONFIG_MESH_FILE) + ": " + configMesh.Json);
+  Serial.println(String(CONFIG_SWITCH_FILE) + ": " + configSwitch.Json);
+
+
+  mesh.setDebugMsgTypes(ERROR | STARTUP | DEBUG);  // set before init() so that you can see startup messages
 
   mesh.init(MESH_SSID, MESH_PASSWORD, &userScheduler, MESH_PORT);
   mesh.onReceive(&receivedCallback);
@@ -89,6 +97,8 @@ void setup() {
   mesh.setContainsRoot(true);
 
   Serial.println("NodeID " + String(mesh.getNodeId()));
+
+  sendUpdates();
 
   blinkNoNodes.set(BLINK_PERIOD, (mesh.getNodeList().size() + 1) * 2, []() {
     // If on, switch off, else switch on
@@ -110,14 +120,6 @@ void setup() {
   });
   userScheduler.addTask(blinkNoNodes);
   blinkNoNodes.enable();
-
-
-  updateFirmware.set(UPDATE_FIRMWARE_PERIOD, TASK_FOREVER, []() {
-
-    sendUpdates();
-  });
-  userScheduler.addTask(updateFirmware);
-  updateFirmware.enable();
 }
 
 void loop() {
@@ -181,8 +183,90 @@ void sendUpdates() {
       //This returns a task that allows you to do things on disable or more,
       //like closing your files or whatever.
       mesh.offerOTA(name, hardware, md5.toString(), ceil(((float)entry.size()) / OTA_PART_SIZE), false);
+
+      while (true) {
+        //This program will not reach loop() so we dont have to worry about file scope.
+        mesh.update();
+      }
     }
-    entry.close();
+  }
+}
+
+void createMissingFiles() {
+
+  if (SD.exists(CONFIG_MESH_FILE) == false) {
+
+    writeSd(CONFIG_MESH_FILE, configMesh.Json);
+  }
+
+  if (SD.exists(CONFIG_SWITCH_FILE) == false) {
+
+    writeSd(CONFIG_SWITCH_FILE, configSwitch.Json);
+  }
+}
+
+void restoreFromSd() {
+
+  if (SD.exists(CONFIG_MESH_FILE)) {
+
+    configMesh.Json = readSd(CONFIG_MESH_FILE);
+  }
+
+  if (SD.exists(CONFIG_SWITCH_FILE)) {
+
+    configSwitch.Json = readSd(CONFIG_SWITCH_FILE);
+  }
+}
+
+void writeSd(String fileName, String contents) {
+
+  SD.remove(fileName);
+
+  if (SD.exists(fileName)) {
+    Serial.println("error deleteing file " + fileName);
+    return;
+  }
+
+  File myFile = SD.open(fileName, FILE_WRITE);
+
+  // if the file opened okay, write to it:
+  if (myFile) {
+    Serial.print("Writing to " + String(myFile.name()));
+    myFile.print(contents);
+    // close the file:
+    myFile.close();
+    Serial.println(" done.");
+  } else {
+    // if the file didn't open, print an error:
+    Serial.println("error opening " + String(myFile.name()));
+  }
+}
+
+String readSd(String fileName) {
+
+  File myFile = SD.open(fileName);
+
+  // if the file opened okay, write to it:
+  if (myFile) {
+    Serial.print("Reading from " + String(myFile.name()));
+
+    String ret = "";
+
+    // read from the file until there's nothing else in it:
+    while (myFile.available()) {
+      ret += myFile.readString();
+    }
+
+    // close the file:
+    myFile.close();
+    Serial.println(" done.");
+
+    ret.trim();
+    return ret;
+  } else {
+    // if the file didn't open, print an error:
+    Serial.println("error opening " + String(myFile.name()));
+    return "";
   }
 }
 
@@ -202,12 +286,18 @@ void receivedCallback(uint32_t from, String & msg) {
 
   if (type == CONFIG_MESH_FILE) {
 
-    configMesh.UpdateConfigMesh(msg);
+    if (configMesh.UpdateConfigMesh(msg)) {
+      // backup to SD
+      writeSd(CONFIG_MESH_FILE, configMesh.Json);
+    }
 
-  }/* else if (type == CONFIG_SWITCH_FILE) {
+  } else if (type == CONFIG_SWITCH_FILE) {
 
-    configSwitch.UpdateConfigSwitch(msg);
-  }*/
+    if (configSwitch.UpdateConfigSwitch(msg)) {
+      // backup to SD
+      writeSd(CONFIG_SWITCH_FILE, configSwitch.Json);
+    }
+  }
 }
 
 void newConnectionCallback(uint32_t nodeId) {
@@ -221,6 +311,8 @@ void newConnectionCallback(uint32_t nodeId) {
 
   mesh.sendSingle(nodeId, configMesh.Json);
   Serial.println("Send to " + String(nodeId) + " msg=" + configMesh.Json);
+  mesh.sendSingle(nodeId, configSwitch.Json);
+  Serial.println("Send to " + String(nodeId) + " msg=" + configSwitch.Json);
 }
 
 void changedConnectionCallback() {

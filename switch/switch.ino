@@ -14,7 +14,7 @@
 #include "core/Config.h"
 #include "core/ConfigWifi.h"
 #include "core/ConfigMesh.h"
-#include "ConfigSwitch.h"
+#include "core/ConfigSwitch.h"
 
 #define SHELLY_1PM
 //#define WEMOS_D1_MINI
@@ -33,7 +33,7 @@
 // Pinout: TX | RX | 3.3V | GPIO0 | GND
 #ifdef SHELLY_1PM
 #define HARDWARE          "SHELLY_1PM"
-#define FIRMWARE          "fw_shelly_1pm.bin" // OTA-Updates
+#define FIRMWARE          "fw_ESP8266_shelly1pm.bin" // OTA-Updates
 #define LED               0
 #define LED_INV           false
 #define DI_0              4
@@ -51,7 +51,7 @@
 // Test Device
 #ifdef WEMOS_D1_MINI
 #define HARDWARE          "WEMOS_D1_MINI"
-#define FIRMWARE          "fw_wemos_d1_mini.bin"  // OTA-Updates
+#define FIRMWARE          "fw_ESP8266_wemosD1Mini.bin"  // OTA-Updates
 #define LED               2
 #define LED_INV           false
 #define DI_0              D1      //GPIO5
@@ -68,7 +68,7 @@
 // Test Device
 #ifdef WEMOS_MINI32
 #define HARDWARE          "WEMOS_MINI32"
-#define FIRMWARE          "fw_wemos_mini32.bin"      // OTA-Updates
+#define FIRMWARE          "fw_ESP32_wemosMini32.bin"      // OTA-Updates
 #define LED               2
 #define LED_INV           true
 #define DI_0              5       //GPIO5
