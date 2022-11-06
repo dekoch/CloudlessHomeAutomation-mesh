@@ -15,6 +15,7 @@
 #include "core/ConfigWifi.h"
 #include "core/ConfigMesh.h"
 #include "core/ConfigSwitch.h"
+#include "DeviceState.h"
 
 #define SHELLY_1PM
 //#define WEMOS_D1_MINI
@@ -134,9 +135,9 @@ class DiState {
 
     DiState() {}
 
-    DiState(JsonObject jsonObj) {
-      Num = jsonObj["num"].as<int>();
-      State = jsonObj["state"].as<bool>();
+    DiState(DynamicJsonDocument doc) {
+      Num = doc["num"].as<int>();
+      State = doc["state"].as<bool>();
     }
 
     String GetJson() {
@@ -159,9 +160,9 @@ class DoState {
 
     DoState() {}
 
-    DoState(JsonObject jsonObj) {
-      Num = jsonObj["num"].as<int>();
-      State = jsonObj["state"].as<bool>();
+    DoState(DynamicJsonDocument doc) {
+      Num = doc["num"].as<int>();
+      State = doc["state"].as<bool>();
     }
 
     String GetJson() {
@@ -187,10 +188,10 @@ class PowerState {
 
     PowerState() {}
 
-    PowerState(JsonObject jsonObj) {
-      Num = jsonObj["num"].as<int>();
-      Value = jsonObj["value"].as<bool>();
-      PowerMultiplier = jsonObj["powerMultiplier"].as<bool>();
+    PowerState(DynamicJsonDocument doc) {
+      Num = doc["num"].as<int>();
+      Value = doc["value"].as<bool>();
+      PowerMultiplier = doc["powerMultiplier"].as<bool>();
     }
 
     String GetJson() {
@@ -218,21 +219,20 @@ void GroupCheckTrigger(uint32_t from, DiState di, uint32_t myNodeId, String json
 
   DynamicJsonDocument doc(1024);
   deserializeJson(doc, json);
-  JsonObject jsonObj = doc.as<JsonObject>();
 
   //Serial.println("GroupCheckTrigger " + json);
 
   String node = configMesh.GetNodeName(from);
 
-  for (int i = 0; i < jsonObj["gCnt"].as<int>(); i++) {
+  for (int i = 0; i < doc["gCnt"].as<int>(); i++) {
 
     bool validTrigger = false;
 
-    for (int ii = 0; ii < jsonObj["g"][i]["tCnt"].as<int>(); ii++) {
+    for (int ii = 0; ii < doc["g"][i]["tCnt"].as<int>(); ii++) {
 
-      if (jsonObj["g"][i]["t"][ii]["node"].as<String>() == node &&
-          jsonObj["g"][i]["t"][ii]["di"].as<int>() == di.Num &&
-          jsonObj["g"][i]["t"][ii]["state"].as<bool>() == di.State) {
+      if (doc["g"][i]["t"][ii]["node"].as<String>() == node &&
+          doc["g"][i]["t"][ii]["di"].as<int>() == di.Num &&
+          doc["g"][i]["t"][ii]["state"].as<bool>() == di.State) {
 
         validTrigger = true;
       }
@@ -242,19 +242,19 @@ void GroupCheckTrigger(uint32_t from, DiState di, uint32_t myNodeId, String json
       continue;
     }
 
-    for (int ii = 0; ii < jsonObj["g"][i]["nCnt"].as<int>(); ii++) {
+    for (int ii = 0; ii < doc["g"][i]["nCnt"].as<int>(); ii++) {
 
       // its Me?
-      if (jsonObj["g"][i]["n"][ii]["node"].as<String>() != myName) {
+      if (doc["g"][i]["n"][ii]["node"].as<String>() != myName) {
         continue;
       }
 
-      Serial.println("group " + jsonObj["g"][i]["name"].as<String>());
+      Serial.println("group " + doc["g"][i]["name"].as<String>());
 
       DoState out = DoState();
-      out.Num = jsonObj["g"][i]["n"][ii]["do"].as<int>();
+      out.Num = doc["g"][i]["n"][ii]["do"].as<int>();
 
-      String setState = jsonObj["g"][i]["n"][ii]["setState"].as<String>();
+      String setState = doc["g"][i]["n"][ii]["setState"].as<String>();
 
       Serial.println("out " + String(out.Num));
       Serial.println("setState " + setState);
@@ -301,6 +301,7 @@ void GroupCheckTrigger(uint32_t from, DiState di, uint32_t myNodeId, String json
       switch (out.Num) {
         case 0:
           do0.State = out.State;
+          SaveDoState(0, out.State);
           break;
       }
     }
@@ -338,10 +339,6 @@ void setup() {
     }
   }
 
-  pinMode(DO_0, OUTPUT);
-  digitalWrite(DO_0, false);
-  do0.Num = 0;
-  do0.State = false;
 
   for (int i = 1; i <= 3; i++) {
     // LED test
@@ -349,6 +346,18 @@ void setup() {
     delay(300);
     digitalWrite(LED, false);
     delay(500);
+  }
+
+
+  LittleFS.begin();
+
+  if (DO_0 >= 0) {
+
+    do0.Num = 0;
+    // restore last state
+    do0.State = ReadDoState(0);
+    pinMode(DO_0, OUTPUT);
+    digitalWrite(DO_0, do0.State);
   }
 
   Serial.print(HARDWARE);
@@ -359,9 +368,8 @@ void setup() {
   Serial.println("LED " + String(LED));
   Serial.println("DI_0 " + String(DI_0));
   Serial.println("DI_1 " + String(DI_1));
-  Serial.println("DO_0 " + String(DO_0));
+  Serial.println("DO_0 " + String(DO_0) + "=" + String(do0.State));
 
-  LittleFS.begin();
   configMesh.Read();
   configSwitch.Read();
 
@@ -558,13 +566,12 @@ void receivedCallback(uint32_t from, String & msg) {
 
   DynamicJsonDocument doc(1024);
   deserializeJson(doc, msg);
-  JsonObject jsonObj = doc.as<JsonObject>();
 
-  String type = jsonObj["t"].as<String>();
+  String type = doc["t"].as<String>();
 
   if (type == "di") {
 
-    DiState di = DiState(jsonObj);
+    DiState di = DiState(doc);
     GroupCheckTrigger(from, di, mesh.getNodeId(), configSwitch.Json);
 
   } else if (type == CONFIG_MESH_FILE) {
