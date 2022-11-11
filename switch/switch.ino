@@ -15,6 +15,7 @@
 #include "core/ConfigWifi.h"
 #include "core/ConfigMesh.h"
 #include "core/ConfigSwitch.h"
+#include "core/ConfigTimer.h"
 #include "DeviceState.h"
 
 #define SHELLY_1PM
@@ -124,6 +125,7 @@ HLW8012 hlw8012;
 
 ConfigMesh configMesh = ConfigMesh();
 ConfigSwitch configSwitch = ConfigSwitch();
+ConfigTimer configTimer = ConfigTimer();
 
 Edge edgeDi0 = Edge();
 Edge edgeDi1 = Edge();
