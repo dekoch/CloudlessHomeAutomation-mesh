@@ -7,32 +7,24 @@
 // connected with painlessMesh
 //************************************************************
 
-#include <painlessMesh.h>
-#include "HLW8012.h"
-#include "core/Edge.h"
-#include "core/Fs.h"
-#include "core/Config.h"
-#include "core/ConfigWifi.h"
-#include "core/ConfigMesh.h"
-#include "core/ConfigSwitch.h"
-#include "core/ConfigTimer.h"
-#include "DeviceState.h"
-
 #define SHELLY_1PM
+//#define SHELLY_2_5
+//#define SONOFF_S20
 //#define WEMOS_D1_MINI
 //#define WEMOS_MINI32
 
 #define VERSION       "1.001"
 
+// SINGLE-CHANNEL RELAY WITH POWER METERING
+// Generic ESP8266 Module Flash 2MB (FS:1MB OTA:~512KB)
+// Pinout: TX | RX | 3.3V | GPIO0 | GND
+//
 // https://www.shelly.cloud/products/shelly-1pm-smart-home-automation-relay/
 // https://www.shelly.cloud/knowledge-base/devices/shelly-1pm/
 // https://templates.blakadder.com/shelly_1PM.html
 // https://www.esphome-devices.com/devices/Shelly-1PM
 // https://github.com/arendst/Tasmota/issues/5716
 // https://github.com/Mollayo/Shelly-1PM/blob/master/config.h
-//
-// Generic ESP8266 Module Flash 2MB (FS:1MB OTA:~512KB)
-// Pinout: TX | RX | 3.3V | GPIO0 | GND
 #ifdef SHELLY_1PM
 #define HARDWARE          "SHELLY_1PM"
 #define FIRMWARE          "fw_ESP8266_shelly1pm.bin" // OTA-Updates
@@ -42,12 +34,57 @@
 #define DI_0_PULLUP       false
 #define DI_1              2       // Button
 #define DI_1_PULLUP       true
+#define DI_2              -1
+#define DI_2_PULLUP       false
 #define DI_CF             5       // HLW8012 Power Sensor https://esphome.io/components/sensor/hlw8012.html
 #define DI_CF1            13
 #define DI_SEL            14
 #define POWER_MULTIPLIER  2214.010646
 #define DO_0              15
+#define DO_1              -1
 #define TEMP_0            A0      // 32kOhm Resistor (10kOhm @ 25C)?!
+#endif
+
+// DOUBLE RELAY SWITCH & ROLLER SHUTTER
+// Generic ESP8266 Module Flash 2MB (FS:1MB OTA:~512KB)
+// Pinout: TX | RX | 3.3V | RST | GPIO0 | GND
+//
+// https://www.shelly.cloud/knowledge-base/devices/shelly-25/
+#ifdef SHELLY_2_5
+#define HARDWARE          "SHELLY_2_5"
+#define FIRMWARE          "fw_ESP8266_shelly2_5.bin" // OTA-Updates
+#define LED               0
+#define LED_INV           false
+#define DI_0              13
+#define DI_0_PULLUP       false
+#define DI_1              5
+#define DI_1_PULLUP       false
+#define DI_2              2       // Button
+#define DI_2_PULLUP       true
+#define DI_CF             -1
+#define DI_CF1            -1
+#define DI_SEL            -1
+#define POWER_MULTIPLIER  0
+#define DO_0              4
+#define DO_1              15
+#define TEMP_0            A0
+#endif
+
+#ifdef SONOFF_S20
+#define HARDWARE          "SONOFF_S20"
+#define FIRMWARE          "fw_ESP8266_sonoff_s20.bin" // OTA-Updates
+#define LED               13
+#define LED_INV           false
+#define DI_0              0       // Button
+#define DI_0_PULLUP       true
+#define DI_1              -1
+#define DI_1_PULLUP       false
+#define DI_CF             -1
+#define DI_CF1            -1
+#define DI_SEL            -1
+#define POWER_MULTIPLIER  0
+#define DO_0              12
+#define TEMP_0            A0
 #endif
 
 // Test Device
@@ -60,11 +97,14 @@
 #define DI_0_PULLUP       false
 #define DI_1              -1
 #define DI_1_PULLUP       false
+#define DI_2              -1
+#define DI_2_PULLUP       false
 #define DI_CF             -1
 #define DI_CF1            -1
 #define DI_SEL            -1
 #define POWER_MULTIPLIER  0
 #define DO_0              D2      //GPIO4
+#define DO_1              -1
 #endif
 
 // Test Device
@@ -97,38 +137,24 @@
 
 #define arr_len(x) (sizeof(x) / sizeof(*x))
 
+#include "core/CHAMesh.h"
+#include "HLW8012.h"
+#include "core/Edge.h"
+#include "DeviceState.h"
+
 // Prototypes
 void sendMessage();
 void receivedCallback(uint32_t from, String & msg);
-void newConnectionCallback(uint32_t nodeId);
-void changedConnectionCallback();
-void nodeTimeAdjustedCallback(int32_t offset);
-void delayReceivedCallback(uint32_t from, int32_t delay);
-
-Scheduler     userScheduler; // to control your personal task
-painlessMesh  mesh;
-
-bool calc_delay = false;
-SimpleList<uint32_t> nodes;
 
 void sendMessage() ; // Prototype
 Task taskSendMessage(TASK_SECOND * 10, TASK_FOREVER, &sendMessage);
-
-// Task to blink the number of nodes
-Task blinkNoNodes;
 Task checkDi;
 Task checkPower;
-bool onFlag = false;
-String myName = "";
 
 HLW8012 hlw8012;
-
-ConfigMesh configMesh = ConfigMesh();
-ConfigSwitch configSwitch = ConfigSwitch();
-ConfigTimer configTimer = ConfigTimer();
-
 Edge edgeDi0 = Edge();
 Edge edgeDi1 = Edge();
+Edge edgeDi2 = Edge();
 
 class DiState {
   public:
@@ -180,6 +206,7 @@ class DoState {
 };
 
 DoState do0 = DoState();
+DoState do1 = DoState();
 
 
 class PowerState {
@@ -267,6 +294,10 @@ void GroupCheckTrigger(uint32_t from, DiState di, uint32_t myNodeId, String json
         case 0:
           gpio = DO_0;
           break;
+
+        case 1:
+          gpio = DO_1;
+          break;
       }
 
       if (gpio == -1) {
@@ -305,6 +336,11 @@ void GroupCheckTrigger(uint32_t from, DiState di, uint32_t myNodeId, String json
           do0.State = out.State;
           SaveDoState(0, out.State);
           break;
+
+        case 1:
+          do1.State = out.State;
+          SaveDoState(1, out.State);
+          break;
       }
     }
   }
@@ -341,6 +377,16 @@ void setup() {
     }
   }
 
+  if (DI_2 >= 0) {
+
+    if (DI_2_PULLUP) {
+      pinMode(DI_2, INPUT_PULLUP);
+    }
+    else {
+      pinMode(DI_2, INPUT);
+    }
+  }
+
 
   for (int i = 1; i <= 3; i++) {
     // LED test
@@ -362,6 +408,15 @@ void setup() {
     digitalWrite(DO_0, do0.State);
   }
 
+  if (DO_1 >= 0) {
+
+    do1.Num = 0;
+    // restore last state
+    do1.State = ReadDoState(1);
+    pinMode(DO_1, OUTPUT);
+    digitalWrite(DO_1, do1.State);
+  }
+
   Serial.print(HARDWARE);
   Serial.print(" ");
   Serial.print(FIRMWARE);
@@ -371,9 +426,6 @@ void setup() {
   Serial.println("DI_0 " + String(DI_0));
   Serial.println("DI_1 " + String(DI_1));
   Serial.println("DO_0 " + String(DO_0) + "=" + String(do0.State));
-
-  configMesh.Read();
-  configSwitch.Read();
 
   if (DI_CF >= 0) {
 
@@ -397,29 +449,11 @@ void setup() {
     }
   }
 
-
-  mesh.setDebugMsgTypes(ERROR | STARTUP | DEBUG);  // set before init() so that you can see error messages
-
-  mesh.init(MESH_SSID, MESH_PASSWORD, &userScheduler, MESH_PORT);
+  MeshSetup();
   mesh.onReceive(&receivedCallback);
-  mesh.onNewConnection(&newConnectionCallback);
-  mesh.onChangedConnections(&changedConnectionCallback);
-  mesh.onNodeTimeAdjusted(&nodeTimeAdjustedCallback);
-  mesh.onNodeDelayReceived(&delayReceivedCallback);
-  mesh.initOTAReceive(FIRMWARE);
 
-  String nodeId = String(mesh.getNodeId());
-  myName = configMesh.GetNodeName(mesh.getNodeId());
-
-  if (myName == "") {
-    myName = nodeId;
-  }
-
-  Serial.println("NodeID " + nodeId);
-  Serial.println("NodeName " + myName);
-
-  userScheduler.addTask(taskSendMessage);
-  taskSendMessage.enable();
+  //userScheduler.addTask(taskSendMessage);
+  //taskSendMessage.enable();
 
   blinkNoNodes.set(BLINK_PERIOD, (mesh.getNodeList().size() + 1) * 2, []() {
     // If on, switch off, else switch on
@@ -485,6 +519,29 @@ void setup() {
       {
         DiState di = DiState();
         di.Num = 1;
+        di.State = state;
+
+        String msg = di.GetJson();
+        mesh.sendBroadcast(msg);
+        Serial.println("Send msg=" + msg);
+
+        GroupCheckTrigger(mesh.getNodeId(), di, mesh.getNodeId(), configSwitch.Json);
+      }
+    }
+
+    if (DI_2 >= 0) {
+
+      if (DI_2_PULLUP) {
+        state = !digitalRead(DI_2);
+      }
+      else {
+        state = digitalRead(DI_2);
+      }
+
+      if (edgeDi2.edge(state))
+      {
+        DiState di = DiState();
+        di.Num = 2;
         di.State = state;
 
         String msg = di.GetJson();
@@ -576,56 +633,7 @@ void receivedCallback(uint32_t from, String & msg) {
     DiState di = DiState(doc);
     GroupCheckTrigger(from, di, mesh.getNodeId(), configSwitch.Json);
 
-  } else if (type == CONFIG_MESH_FILE) {
-
-    configMesh.UpdateConfigMesh(msg);
-
-  } else if (type == CONFIG_SWITCH_FILE) {
-
-    configSwitch.UpdateConfigSwitch(msg);
+  } else {
+    ConfigReceivedCallback(type, msg);
   }
-}
-
-void newConnectionCallback(uint32_t nodeId) {
-  // Reset blink task
-  onFlag = false;
-  blinkNoNodes.setIterations((mesh.getNodeList().size() + 1) * 2);
-  blinkNoNodes.enableDelayed(BLINK_PERIOD - (mesh.getNodeTime() % (BLINK_PERIOD * 1000)) / 1000);
-
-  Serial.printf("New Connection, nodeId = %u\n", nodeId);
-  Serial.printf("New Connection, %s\n", mesh.subConnectionJson(true).c_str());
-
-  mesh.sendSingle(nodeId, configMesh.Json);
-  Serial.println("Send to " + String(nodeId) + " msg=" + configMesh.Json);
-  mesh.sendSingle(nodeId, configSwitch.Json);
-  Serial.println("Send to " + String(nodeId) + " msg=" + configSwitch.Json);
-}
-
-void changedConnectionCallback() {
-  Serial.printf("Changed connections\n");
-  // Reset blink task
-  onFlag = false;
-  blinkNoNodes.setIterations((mesh.getNodeList().size() + 1) * 2);
-  blinkNoNodes.enableDelayed(BLINK_PERIOD - (mesh.getNodeTime() % (BLINK_PERIOD * 1000)) / 1000);
-
-  nodes = mesh.getNodeList();
-
-  Serial.printf("Num nodes: %d\n", nodes.size());
-  Serial.printf("Connection list:");
-
-  SimpleList<uint32_t>::iterator node = nodes.begin();
-  while (node != nodes.end()) {
-    Serial.printf(" %u", *node);
-    node++;
-  }
-  Serial.println();
-  calc_delay = true;
-}
-
-void nodeTimeAdjustedCallback(int32_t offset) {
-  Serial.printf("Adjusted time %u. Offset = %d\n", mesh.getNodeTime(), offset);
-}
-
-void delayReceivedCallback(uint32_t from, int32_t delay) {
-  Serial.printf("Delay to node %u is %d us\n", from, delay);
 }
