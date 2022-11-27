@@ -286,14 +286,14 @@ void receivedCallback(uint32_t from, String & msg) {
 
   if (type == CONFIG_MESH_FILE) {
 
-    if (configMesh.UpdateConfigMesh(msg)) {
+    if (configMesh.Update(msg)) {
       // backup to SD
       writeSd(CONFIG_MESH_FILE, configMesh.Json);
     }
 
   } else if (type == CONFIG_SWITCH_FILE) {
 
-    if (configSwitch.UpdateConfigSwitch(msg)) {
+    if (configSwitch.Update(msg)) {
       // backup to SD
       writeSd(CONFIG_SWITCH_FILE, configSwitch.Json);
     }

@@ -13,7 +13,7 @@
 //#define WEMOS_D1_MINI
 //#define WEMOS_MINI32
 
-#define VERSION       "1.001"
+#define VERSION       "1.003"
 
 // SINGLE-CHANNEL RELAY WITH POWER METERING
 // Generic ESP8266 Module Flash 2MB (FS:1MB OTA:~512KB)
@@ -128,6 +128,7 @@
 #define BLINK_DURATION      100   // milliseconds LED is on for
 #define CHECK_DI_PERIOD     100   // milliseconds until cycle repeat
 #define CHECK_POWER_PERIOD  5000  // milliseconds until cycle repeat
+#define CHECK_TIMER_PERIOD  500   // milliseconds until cycle repeat
 #define CHECK_TEMP_PERIOD   5000  // milliseconds until cycle repeat
 
 // These are the nominal values for the resistors in the circuit
@@ -139,7 +140,6 @@
 
 #include "core/CHAMesh.h"
 #include "HLW8012.h"
-#include "core/Edge.h"
 #include "DeviceState.h"
 
 // Prototypes
@@ -150,11 +150,13 @@ void sendMessage() ; // Prototype
 Task taskSendMessage(TASK_SECOND * 10, TASK_FOREVER, &sendMessage);
 Task checkDi;
 Task checkPower;
+Task checkTimer;
 
 HLW8012 hlw8012;
 Edge edgeDi0 = Edge();
 Edge edgeDi1 = Edge();
 Edge edgeDi2 = Edge();
+TimerItem NodeTimer[5];
 
 class DiState {
   public:
@@ -244,6 +246,75 @@ class PowerState {
 };
 
 
+void SetOutputState(uint32_t from, DoState out, String setState) {
+
+  /*Serial.println("out " + String(out.Num));
+  Serial.println("setState " + setState);*/
+
+  int gpio = -1;
+
+  switch (out.Num) {
+    case 0:
+      gpio = DO_0;
+      break;
+
+    case 1:
+      gpio = DO_1;
+      break;
+  }
+
+  if (gpio == -1) {
+    mesh.sendSingle(from, "invalid out " + String(out.Num));
+    return;
+  }
+
+  bool oldState = digitalRead(gpio);
+  out.State = false;
+
+  if (setState == "S") {
+
+    out.State = true;
+
+  } else if (setState == "R") {
+
+    out.State = false;
+
+  } else if (setState == "Tog") {
+
+    out.State = !oldState;
+
+  } else {
+
+    String msg = "setState " + setState + " not supported";
+
+    if (from > 0) {
+      mesh.sendSingle(from, msg);
+    } else {
+      Serial.println(msg);
+    }
+    return;
+  }
+
+  digitalWrite(gpio, out.State);
+
+  String msg = out.GetJson();
+  mesh.sendBroadcast(msg);
+  Serial.println("Send msg=" + msg);
+
+  switch (out.Num) {
+    case 0:
+      do0.State = out.State;
+      SaveDoState(0, out.State);
+      break;
+
+    case 1:
+      do1.State = out.State;
+      SaveDoState(1, out.State);
+      break;
+  }
+}
+
+
 void GroupCheckTrigger(uint32_t from, DiState di, uint32_t myNodeId, String json) {
 
   DynamicJsonDocument doc(1024);
@@ -285,63 +356,7 @@ void GroupCheckTrigger(uint32_t from, DiState di, uint32_t myNodeId, String json
 
       String setState = doc["g"][i]["n"][ii]["setState"].as<String>();
 
-      Serial.println("out " + String(out.Num));
-      Serial.println("setState " + setState);
-
-      int gpio = -1;
-
-      switch (out.Num) {
-        case 0:
-          gpio = DO_0;
-          break;
-
-        case 1:
-          gpio = DO_1;
-          break;
-      }
-
-      if (gpio == -1) {
-        mesh.sendSingle(from, "invalid out " + String(out.Num));
-        return;
-      }
-
-      bool oldState = digitalRead(gpio);
-      out.State = false;
-
-      if (setState == "S") {
-
-        out.State = true;
-
-      } else if (setState == "R") {
-
-        out.State = false;
-
-      } else if (setState == "Tog") {
-
-        out.State = !oldState;
-
-      } else {
-        mesh.sendSingle(from, "setState " + setState + " not supported");
-        return;
-      }
-
-      digitalWrite(gpio, out.State);
-
-      String msg = out.GetJson();
-      mesh.sendBroadcast(msg);
-      Serial.println("Send msg=" + msg);
-
-      switch (out.Num) {
-        case 0:
-          do0.State = out.State;
-          SaveDoState(0, out.State);
-          break;
-
-        case 1:
-          do1.State = out.State;
-          SaveDoState(1, out.State);
-          break;
-      }
+      SetOutputState(from, out, setState);
     }
   }
 }
@@ -585,6 +600,41 @@ void setup() {
     userScheduler.addTask(checkPower);
     checkPower.enable();
   }
+
+
+  for (int i = 0; i < arr_len(NodeTimer); i++) {
+    NodeTimer[i] = configTimer.GetItems(myName, i);
+  }
+
+  checkTimer.set(CHECK_TIMER_PERIOD, TASK_FOREVER, []() {
+
+    for (int i = 0; i < arr_len(NodeTimer); i++) {
+
+      if (NodeTimer[i].Trigger == "DO0") {
+
+        NodeTimer[i].CheckTrigger(do0.State);
+        
+      } else if (NodeTimer[i].Trigger == "DO1") {
+
+        NodeTimer[i].CheckTrigger(do1.State);
+        
+      } else {
+        continue;
+      }
+      
+      if (NodeTimer[i].Elapsed()) {
+
+        Serial.println("Timer " + NodeTimer[i].Name);
+
+        DoState out = DoState();
+        out.Num = NodeTimer[i].Output;
+        SetOutputState(0, out, NodeTimer[i].SetState);
+      }
+    }
+
+  });
+  userScheduler.addTask(checkTimer);
+  checkTimer.enable();
 
   randomSeed(analogRead(A0));
 }
