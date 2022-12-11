@@ -13,7 +13,7 @@
 //#define WEMOS_D1_MINI
 //#define WEMOS_MINI32
 
-#define VERSION       "1.003"
+#define VERSION       "1.004"
 
 // SINGLE-CHANNEL RELAY WITH POWER METERING
 // Generic ESP8266 Module Flash 2MB (FS:1MB OTA:~512KB)
@@ -249,7 +249,7 @@ class PowerState {
 void SetOutputState(uint32_t from, DoState out, String setState) {
 
   /*Serial.println("out " + String(out.Num));
-  Serial.println("setState " + setState);*/
+    Serial.println("setState " + setState);*/
 
   int gpio = -1;
 
@@ -376,9 +376,11 @@ void setup() {
 
     if (DI_0_PULLUP) {
       pinMode(DI_0, INPUT_PULLUP);
+      edgeDi0.Init(!digitalRead(DI_0));
     }
     else {
       pinMode(DI_0, INPUT);
+      edgeDi0.Init(digitalRead(DI_0));
     }
   }
 
@@ -386,9 +388,11 @@ void setup() {
 
     if (DI_1_PULLUP) {
       pinMode(DI_1, INPUT_PULLUP);
+      edgeDi1.Init(!digitalRead(DI_1));
     }
     else {
       pinMode(DI_1, INPUT);
+      edgeDi1.Init(digitalRead(DI_1));
     }
   }
 
@@ -396,9 +400,11 @@ void setup() {
 
     if (DI_2_PULLUP) {
       pinMode(DI_2, INPUT_PULLUP);
+      edgeDi2.Init(!digitalRead(DI_2));
     }
     else {
       pinMode(DI_2, INPUT);
+      edgeDi2.Init(digitalRead(DI_2));
     }
   }
 
@@ -507,7 +513,7 @@ void setup() {
 
       //onFlag = state;
 
-      if (edgeDi0.edge(state))
+      if (edgeDi0.DetectEdge(state))
       {
         DiState di = DiState();
         di.Num = 0;
@@ -530,7 +536,7 @@ void setup() {
         state = digitalRead(DI_1);
       }
 
-      if (edgeDi1.edge(state))
+      if (edgeDi1.DetectEdge(state))
       {
         DiState di = DiState();
         di.Num = 1;
@@ -553,7 +559,7 @@ void setup() {
         state = digitalRead(DI_2);
       }
 
-      if (edgeDi2.edge(state))
+      if (edgeDi2.DetectEdge(state))
       {
         DiState di = DiState();
         di.Num = 2;
@@ -613,15 +619,15 @@ void setup() {
       if (NodeTimer[i].Trigger == "DO0") {
 
         NodeTimer[i].CheckTrigger(do0.State);
-        
+
       } else if (NodeTimer[i].Trigger == "DO1") {
 
         NodeTimer[i].CheckTrigger(do1.State);
-        
+
       } else {
         continue;
       }
-      
+
       if (NodeTimer[i].Elapsed()) {
 
         Serial.println("Timer " + NodeTimer[i].Name);

@@ -12,12 +12,15 @@
 #include "SD.h"
 #include "SPI.h"
 #include "core/Fs.h"
+#include "core/Edge.h"
+#include "core/Timer.h"
 #include "core/Config.h"
 #include "core/ConfigWifi.h"
 #include "core/ConfigMesh.h"
 #include "core/ConfigSwitch.h"
+#include "core/ConfigTimer.h"
 
-#define VERSION "1.001"
+#define VERSION "1.002"
 
 #define HARDWARE  "WEMOS_D1_MINI"
 #define LED       2
@@ -44,6 +47,7 @@ bool onFlag = false;
 
 ConfigMesh configMesh = ConfigMesh();
 ConfigSwitch configSwitch = ConfigSwitch();
+ConfigTimer configTimer = ConfigTimer();
 
 void setup() {
   delay(500);
@@ -78,6 +82,7 @@ void setup() {
 
   Serial.println(String(CONFIG_MESH_FILE) + ": " + configMesh.Json);
   Serial.println(String(CONFIG_SWITCH_FILE) + ": " + configSwitch.Json);
+  Serial.println(String(CONFIG_TIMER_FILE) + ": " + configTimer.Json);
 
 
   mesh.setDebugMsgTypes(ERROR | STARTUP | DEBUG);  // set before init() so that you can see startup messages
@@ -203,6 +208,11 @@ void createMissingFiles() {
 
     writeSd(CONFIG_SWITCH_FILE, configSwitch.Json);
   }
+
+  if (SD.exists(CONFIG_TIMER_FILE) == false) {
+
+    writeSd(CONFIG_TIMER_FILE, configTimer.Json);
+  }
 }
 
 void restoreFromSd() {
@@ -215,6 +225,11 @@ void restoreFromSd() {
   if (SD.exists(CONFIG_SWITCH_FILE)) {
 
     configSwitch.Json = readSd(CONFIG_SWITCH_FILE);
+  }
+
+  if (SD.exists(CONFIG_TIMER_FILE)) {
+
+    configTimer.Json = readSd(CONFIG_TIMER_FILE);
   }
 }
 
@@ -297,6 +312,12 @@ void receivedCallback(uint32_t from, String & msg) {
       // backup to SD
       writeSd(CONFIG_SWITCH_FILE, configSwitch.Json);
     }
+  } else if (type == CONFIG_TIMER_FILE) {
+
+    if (configTimer.Update(msg)) {
+      // backup to SD
+      writeSd(CONFIG_TIMER_FILE, configTimer.Json);
+    }
   }
 }
 
@@ -313,6 +334,8 @@ void newConnectionCallback(uint32_t nodeId) {
   Serial.println("Send to " + String(nodeId) + " msg=" + configMesh.Json);
   mesh.sendSingle(nodeId, configSwitch.Json);
   Serial.println("Send to " + String(nodeId) + " msg=" + configSwitch.Json);
+  mesh.sendSingle(nodeId, configTimer.Json);
+  Serial.println("Send to " + String(nodeId) + " msg=" + configTimer.Json);
 }
 
 void changedConnectionCallback() {
